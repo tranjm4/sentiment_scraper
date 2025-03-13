@@ -5,14 +5,11 @@ from datetime import datetime
 from bson import ObjectId
 from typing import List, Optional
 
+from argparse import ArgumentParser
+
 app = FastAPI()
 
 client = pymongo.MongoClient("localhost", 27017)
-
-db = client["news_database"]
-
-articles_collection = db["articles"]
-
 
 class Article(BaseModel):
     title: str
@@ -86,5 +83,14 @@ def search_articles(q: str = Query(..., description="Search query")):
     return articles if articles else {"message": "No matching articles found"}
     
 
+def main():
+    parser = ArgumentParser()
+    parser.add_argument("-e", "--erase")
+    
+    args = parser.parse_args()
+    if args.erase == True:
+        db = client['news_database']
+        db.drop_collection("articles")
 
-
+if __name__ == '__main__':
+    main()

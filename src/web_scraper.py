@@ -11,6 +11,8 @@ import threading
 
 import requests
 
+import pymongo
+
 class BBCWebCrawler:
     def __init__(self, max_depth=5):
         self.max_depth = max_depth
@@ -81,7 +83,7 @@ class BBCWebCrawler:
             # traverse single layer of URLs
             threads = []
             for i in range(len(url_queue)):
-                print(f"Crawling article {i+1}...", end="")
+                print(f"Crawling article {i+1}...")
                 url = url_queue.pop(0)
                 # thread = threading.Thread(
                 #     target=self.crawl_article,
@@ -90,10 +92,11 @@ class BBCWebCrawler:
                 
                 # threads.append(thread)
                 # thread.start()
-                self.crawl_article(url, 0)
+                self.crawl_article(url, depth)
                 
-                print(" Done")
-                time.sleep(0.5)
+                print("Done")
+                print()
+                time.sleep(15)
             
             # for thread in threads:
             #     thread.join()
@@ -114,6 +117,8 @@ class BBCWebCrawler:
         using shared resources (e.g., article_urls, accessing database)
         is highly advised
         """
+        if current_depth > self.max_depth:
+            return
         response = requests.get(url)
         
         if response.status_code == 200:
@@ -121,10 +126,15 @@ class BBCWebCrawler:
             soup = BeautifulSoup(response.text, "html.parser")
             title, author, date, content, tags = self.parse_soup(soup)
             
+            print(any([x == None for x in [title, author, date, content, tags]]))
+            
             # add data to database
+            add_to_db(title, author, date, content, tags, url, "BBC")
             
             # get articles to add to queue
             self.get_neighbor_articles(soup)
+            
+            return
             
         else:
             print(f"Error fetching article at {url}\nError response: {response}")
@@ -175,7 +185,7 @@ class BBCWebCrawler:
             date = soup.find("meta", attrs={"name":"article:modified_time"})['content']
             # parse date
             parsed_date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ")
-            return parsed_date
+            return parsed_date.isoformat()
         except:
             return None
         
@@ -231,32 +241,19 @@ def setup_selenium_webdriver():
     
     return driver
 
-    
-def parse_links(start_url, base_url):
-    driver = setup_selenium_webdriver()
-    driver.get(start_url)
-    
-    divs = driver.find_elements(By.CSS_SELECTOR, 'div[data-indexcard="true"]')
-    
-    articles = []
-    hrefs = collect_hrefs(divs)
-    
-    driver.quit()
-
-def collect_hrefs(divs):
-    hrefs = []
-    for div in divs:
-        try:
-            a = div.find_element(By.TAG_NAME, "a")
-            href = a.get_attribute("href")
-            hrefs.append(href)
-        except:
-            continue
-        
-    return hrefs
-
-def parse_article(start_url, base_url):
-    pass
+def add_to_db(title, author, date, content, tags, url, source="BBC"):
+    article = {
+        "title": title,
+        "author": author,
+        "published_date": date,
+        "source": source,
+        "content": content,
+        "tags": tags,
+        "url": url
+    }
+    print(f"Posting to DB...", end="")
+    response = requests.post("http://localhost:8000/articles/", json=article, timeout=100)
+    print(f" response: {response}")
 
 def main():
     # driver = setup_selenium_webdriver()

@@ -12,6 +12,7 @@ import threading
 import requests
 
 import pymongo
+from pprint import pprint
 
 class BBCWebCrawler:
     def __init__(self, max_depth=5):
@@ -63,6 +64,8 @@ class BBCWebCrawler:
                 for div in divs:
                     try:
                         href = div.find("a")["href"]
+                        if self._filter_href(href) == False:
+                            continue
                         link = href if href.startswith("http") else self.base_url + href
                         self.start_article_urls.append(link)
                         self.visited_links.add(link)
@@ -79,12 +82,15 @@ class BBCWebCrawler:
         for url in self.start_article_urls:
             url_queue.append(url)
         depth = 0
-        while len(url_queue) > 0:
+        while len(url_queue) > 0 and depth < self.max_depth:
             # traverse single layer of URLs
             threads = []
-            for i in range(len(url_queue)):
+            layer_size = len(url_queue)
+            print(f"{'-'*50}\nLayer Size: {layer_size}\n{'-'*50}")
+            for i in range(layer_size):
                 print(f"Crawling article {i+1}...")
                 url = url_queue.pop(0)
+                print(url)
                 # thread = threading.Thread(
                 #     target=self.crawl_article,
                 #     args=(url, depth)
@@ -96,10 +102,11 @@ class BBCWebCrawler:
                 
                 print("Done")
                 print()
-                time.sleep(15)
+                time.sleep(0.5)
             
             # for thread in threads:
             #     thread.join()
+            layer_size = len(url_queue)
             depth += 1
             print(f"\n{'*'*50}\nIncreasing depth to {depth}\n{'*'*50}\n")
             
@@ -222,6 +229,8 @@ class BBCWebCrawler:
             div = soup.find("div", attrs={"data-analytics_group_name":"More"})
             hrefs = [a['href'] for a in div.find("a")]
             for href in hrefs:
+                if self._filter_href(href) == False:
+                    continue
                 link = href if href.startswith("http") else self.base_url + href
                 if link in self.visited_links:
                     continue
@@ -229,6 +238,16 @@ class BBCWebCrawler:
                 self.visited_links.add(link)
         except:
             return
+        
+    def _filter_href(self, href):
+        """
+        Filters the href. 
+        Returns False if it contains certain paths (i.e., "audio", "videos", "live"),
+        Returns True otherwise
+        """
+        ignore_paths = ["audio", "videos", "video", "reel", "live"]
+        href_paths = href.split("/")
+        return not any([ignore_path in href_paths for ignore_path in ignore_paths])
 
 def setup_selenium_webdriver():
     options = webdriver.ChromeOptions()
@@ -263,7 +282,7 @@ def main():
     # urls = crawl_site(start_url, base_url)
     # print(urls)
     
-    crawler = BBCWebCrawler(max_depth=1)
+    crawler = BBCWebCrawler(max_depth=3)
     crawler.crawl()
     
     # threads = []

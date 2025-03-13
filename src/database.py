@@ -8,15 +8,18 @@ from typing import List, Optional
 app = FastAPI()
 
 client = pymongo.MongoClient("localhost", 27017)
+
 db = client["news_database"]
 
 articles_collection = db["articles"]
 
+
 class Article(BaseModel):
     title: str
     content: str
+    author: str
     source: str
-    published_date: Optional[str] = datetime.utcnow().strftime("%Y-%m-%d")
+    published_date: Optional[str] = None
     url: Optional[str] = None
     tags: List[str] = []
     

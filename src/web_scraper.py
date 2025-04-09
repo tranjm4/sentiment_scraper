@@ -1,31 +1,44 @@
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 import time
 from datetime import datetime
 
-import threading
-
 import requests
 
 import pymongo
+import os
+from dotenv import load_dotenv
+
 from pprint import pprint
 
 class BBCWebCrawler:
     def __init__(self, max_depth=5):
         self.max_depth = max_depth
+        
         self.visited_links = set()
+        # self.get_database_links()
+        
         self.base_url = "https://www.bbc.com"
         self.start_urls = self._get_start_urls()
         
-        self.start_article_urls = []
-        
-        self.article_urls = []
-        
+        self.url_queue = []
         self._get_start_articles()
+        
+    def get_database_links(self):
+        load_dotenv()
+        mongo_uri = os.getenv("MONGO_URI")
+        client = pymongo.MongoClient(mongo_uri)
+        db = client['database']
+        articles = db['articles']
+        
+        for article in articles.find():
+            # add 'url' to self.visited_links
+            url = article.get('url')
+            if url:
+                self.visited_links.add(url)
         
     def _get_start_urls(self):
         """
@@ -67,7 +80,7 @@ class BBCWebCrawler:
                         if self._filter_href(href) == False:
                             continue
                         link = href if href.startswith("http") else self.base_url + href
-                        self.start_article_urls.append(link)
+                        self.url_queue.append(link)
                         self.visited_links.add(link)
                     except:
                         continue
@@ -78,18 +91,15 @@ class BBCWebCrawler:
         """
         Performs a BFS starting from the given article_urls
         """
-        url_queue = []
-        for url in self.start_article_urls:
-            url_queue.append(url)
         depth = 0
-        while len(url_queue) > 0 and depth < self.max_depth:
+        while len(self.url_queue) > 0 and depth < self.max_depth:
             # traverse single layer of URLs
             threads = []
-            layer_size = len(url_queue)
+            layer_size = len(self.url_queue)
             print(f"{'-'*50}\nLayer Size: {layer_size}\n{'-'*50}")
             for i in range(layer_size):
                 print(f"Crawling article {i+1}...")
-                url = url_queue.pop(0)
+                url = self.url_queue.pop(0)
                 print(url)
                 # thread = threading.Thread(
                 #     target=self.crawl_article,
@@ -102,11 +112,11 @@ class BBCWebCrawler:
                 
                 print("Done")
                 print()
-                time.sleep(0.5)
+                time.sleep(0.25)
             
             # for thread in threads:
             #     thread.join()
-            layer_size = len(url_queue)
+            layer_size = len(self.url_queue)
             depth += 1
             print(f"\n{'*'*50}\nIncreasing depth to {depth}\n{'*'*50}\n")
             
@@ -226,15 +236,15 @@ class BBCWebCrawler:
         Returns None
         """
         try:
-            div = soup.find("div", attrs={"data-analytics_group_name":"More"})
-            hrefs = [a['href'] for a in div.find("a")]
+            div = soup.find("aside", attrs={"data-analytics_group_name": "More"})
+            hrefs = [a['href'] for a in div.find_all("a", attrs={"data-testid": "internal-link"})]
             for href in hrefs:
                 if self._filter_href(href) == False:
                     continue
                 link = href if href.startswith("http") else self.base_url + href
                 if link in self.visited_links:
                     continue
-                self.article_urls.append(link)
+                self.url_queue.append(link)
                 self.visited_links.add(link)
         except:
             return
@@ -283,6 +293,8 @@ def main():
     # print(urls)
     
     crawler = BBCWebCrawler(max_depth=3)
+    # print(len(crawler.visited_links))
+    # print(crawler.visited_links)
     crawler.crawl()
     
     # threads = []

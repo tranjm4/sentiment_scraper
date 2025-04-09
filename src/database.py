@@ -1,4 +1,8 @@
 import pymongo
+
+from dotenv import load_dotenv
+import os
+
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime
@@ -9,7 +13,12 @@ from argparse import ArgumentParser
 
 app = FastAPI()
 
-client = pymongo.MongoClient("localhost", 27017)
+load_dotenv()
+mongo_uri = os.getenv("MONGO_URI")
+client = pymongo.MongoClient(mongo_uri)
+
+db = client['database']
+articles_collection = db['articles']
 
 class Article(BaseModel):
     title: str
@@ -82,6 +91,10 @@ def search_articles(q: str = Query(..., description="Search query")):
     articles = [{"_id": str(article["_id"]), **article} for article in results]
     return articles if articles else {"message": "No matching articles found"}
     
+
+def connect_to_db():
+    client = pymongo.MongoClient(mongo_uri)
+    return client
 
 def main():
     parser = ArgumentParser()
